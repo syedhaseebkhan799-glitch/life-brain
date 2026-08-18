@@ -1,0 +1,11 @@
+# Pinned so a new upstream release can never break the deployed app.
+# Bump these deliberately, then redeploy and test.
+streamlit==1.60.0
+google-genai==2.18.1
+python-dotenv==1.2.2
+
+# File readers. Both are optional at import time -- src/documents.py names the
+# missing package rather than crashing -- but a deployment wants them present,
+# because "upload any file" is the whole point of the dashboard.
+pypdf==6.16.1
+python-docx==1.2.0

@@ -1,0 +1,23 @@
+.env
+.streamlit/secrets.toml
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Nothing here should ever hold a life profile, but if one is ever saved for
+# testing, it must not travel with the repo.
+*.life.md
+uploads/
+my_life_template.txt
+my_life_profile.pdf
+
+# Everything in samples/ is ignored except the scripts that generate it. A
+# useful sample is a filled-in life profile by definition -- a real name, a real
+# date of birth, a real mother's name -- so "out" is the safe default, and
+# anything genuinely shareable has to be un-ignored by hand.
+samples/*
+!samples/*.py
+
+# Stray debug output from a live API test. Contains a key prefix.
+*$OUT*
