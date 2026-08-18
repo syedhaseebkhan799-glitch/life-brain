@@ -86,6 +86,18 @@ def build_prompt(profile: str, question: str, history=None) -> str:
     )
 
 
+def style_of(name) -> tuple:
+    """`(instruction, token_cap)` for a named answer style, falling back safely.
+
+    An unknown name is the default rather than an error: the style arrives from
+    a widget, and a stale session or a renamed entry should change the length of
+    an answer, never cost the person the answer itself.
+    """
+    return config.ANSWER_STYLES.get(
+        name, config.ANSWER_STYLES[config.DEFAULT_ANSWER_STYLE]
+    )
+
+
 def _prepare(profile: str, question: str, history, client, model):
     """The checks and setup both answer paths share. -> (client, prompt, model)."""
     if not question or not question.strip():
@@ -99,24 +111,28 @@ def _prepare(profile: str, question: str, history, client, model):
             model or config.GEMINI_MODEL)
 
 
-def _request(prompt: str, model: str) -> dict:
+def _request(prompt: str, model: str, style=None) -> dict:
+    """The whole call. The style's cap travels with its instruction, because
+    'be thorough' under a 2,000 token ceiling is an answer cut off mid-sentence."""
+    instruction, max_tokens = style_of(style)
     return {
         "model": model,
         "contents": prompt,
         "config": {
-            "system_instruction": config.SYSTEM_PROMPT,
-            "max_output_tokens": config.MAX_OUTPUT_TOKENS,
+            "system_instruction": f"{config.SYSTEM_PROMPT}\n\nLENGTH\n- {instruction}",
+            "max_output_tokens": max_tokens,
         },
     }
 
 
 def ask(profile: str, question: str, history=None, client=None,
-        model=None) -> str:
+        model=None, style=None) -> str:
     """Answer one question about the profile. `client` is injectable for tests."""
     client, prompt, model = _prepare(profile, question, history, client, model)
 
     try:
-        response = client.models.generate_content(**_request(prompt, model))
+        response = client.models.generate_content(
+            **_request(prompt, model, style))
     except Exception as e:
         raise BrainError(_readable(e, model))
 
@@ -126,7 +142,8 @@ def ask(profile: str, question: str, history=None, client=None,
     return text.strip()
 
 
-def stream(profile: str, question: str, history=None, client=None, model=None):
+def stream(profile: str, question: str, history=None, client=None, model=None,
+           style=None):
     """The same answer, yielded in pieces as Gemini produces them.
 
     Sending the whole profile every time means a slow first token, and a
@@ -143,7 +160,7 @@ def stream(profile: str, question: str, history=None, client=None, model=None):
         produced = False
         try:
             for chunk in client.models.generate_content_stream(
-                    **_request(prompt, model)):
+                    **_request(prompt, model, style)):
                 piece = getattr(chunk, "text", None)
                 if piece:
                     produced = True

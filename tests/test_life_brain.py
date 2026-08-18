@@ -211,7 +211,10 @@ def test_the_system_prompt_is_sent_as_a_system_instruction():
     as system instructions rather than as more of the same text."""
     client = FakeGemini()
     brain.ask("Born 1996.", "when?", client=client)
-    assert client.seen["config"]["system_instruction"] == config.SYSTEM_PROMPT
+    # `startswith`, not equality: the chosen answer style is appended to these
+    # rules, and the point being defended is that the rules lead.
+    assert client.seen["config"]["system_instruction"].startswith(
+        config.SYSTEM_PROMPT)
 
 
 def test_an_empty_reply_is_an_error_not_a_blank_bubble():
@@ -268,7 +271,8 @@ def test_streaming_sends_the_same_grounding_rules_as_asking():
     """Two paths to one answer must not disagree about the system prompt."""
     client = FakeGemini()
     list(brain.stream("Born 1996.", "when?", client=client))
-    assert client.seen["config"]["system_instruction"] == config.SYSTEM_PROMPT
+    assert client.seen["config"]["system_instruction"].startswith(
+        config.SYSTEM_PROMPT)
 
 
 def test_streaming_refuses_a_missing_profile_before_it_yields_anything():
@@ -315,6 +319,55 @@ def test_the_transcript_warns_it_is_private():
 
 
 # --- Privacy -----------------------------------------------------------------
+
+# --- Answer style, and the refusal it was added for --------------------------
+
+def test_a_request_to_organise_is_not_treated_as_a_missing_fact():
+    """The bug this defends against, in the user's own words: "TELL ME FULL
+    STUCTURE LIFE IN BRANCH" came back as "the life profile does not contain
+    information about 'full structure life in branch'". A way of arranging facts
+    is not a fact, and the prompt has to say so."""
+    # Whitespace-normalised: these rules are line-wrapped in the source, and a
+    # test that breaks on a reflow is a test that gets deleted rather than read.
+    prompt = " ".join(config.SYSTEM_PROMPT.lower().split())
+    assert "arranging what the profile already contains" in prompt
+    assert "only ever about a missing fact" in prompt
+
+
+def test_the_prompt_reads_intent_rather_than_the_literal_wording():
+    """The person does not always write in perfect English. A question must not
+    be refused for how it was phrased when its meaning is plain."""
+    prompt = " ".join(config.SYSTEM_PROMPT.lower().split())
+    assert "may not write in perfect english" in prompt
+    assert "never refuse a question because of how it was phrased" in prompt
+
+
+@pytest.mark.parametrize("style", list(config.ANSWER_STYLES))
+def test_each_style_reaches_the_request_with_its_own_token_cap(style):
+    client = FakeGemini()
+    brain.ask("Born 1996.", "when?", client=client, style=style)
+    instruction, cap = config.ANSWER_STYLES[style]
+    assert client.seen["config"]["max_output_tokens"] == cap
+    assert instruction in client.seen["config"]["system_instruction"]
+    # The grounding rules survive the style being appended to them.
+    assert "Answer ONLY from the profile" in \
+        client.seen["config"]["system_instruction"]
+
+
+def test_full_detail_gets_a_bigger_cap_than_short():
+    """'Be thorough' under a small ceiling is an answer that stops mid-sentence."""
+    assert (config.ANSWER_STYLES["Full detail"][1]
+            > config.ANSWER_STYLES["Short"][1])
+
+
+def test_an_unknown_style_falls_back_instead_of_failing():
+    """The style comes from a widget. A stale session should change an answer's
+    length, never cost the person the answer."""
+    assert brain.style_of("no-such-style") == \
+        config.ANSWER_STYLES[config.DEFAULT_ANSWER_STYLE]
+    assert brain.style_of(None) == \
+        config.ANSWER_STYLES[config.DEFAULT_ANSWER_STYLE]
+
 
 def test_the_upload_limit_matches_the_one_streamlit_enforces():
     """Two places state this number, and Streamlit's wins. If config.py claims

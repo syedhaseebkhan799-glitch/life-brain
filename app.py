@@ -32,6 +32,7 @@ PASTED_KEY = "life_pasted"
 SIGNATURE_KEY = "life_signature"
 PENDING_KEY = "life_pending_question"
 MODEL_KEY = "life_model"
+STYLE_KEY = "life_style"
 
 # Carries a suffix because it goes through the same reader as an uploaded file,
 # and that reader refuses anything it does not recognise by extension.
@@ -98,6 +99,24 @@ with st.sidebar:
         st.progress(used, text=f"{used:.0%} of the size limit")
     else:
         st.caption("Nothing added yet.")
+
+    st.divider()
+
+    theme.section("Answer style")
+    st.segmented_control(
+        "Answer style",
+        list(config.ANSWER_STYLES),
+        key=STYLE_KEY,
+        default=config.DEFAULT_ANSWER_STYLE,
+        required=True,
+        label_visibility="collapsed",
+        width="stretch",
+        help=(
+            "How much you want back. **Full detail** is the one for “lay out my "
+            "whole life” — it answers under headings, section by section, "
+            "instead of in a paragraph."
+        ),
+    )
 
     st.divider()
 
@@ -286,7 +305,8 @@ if question:
         try:
             for piece in brain.stream(
                     profile, question, history=history,
-                    model=st.session_state.get(MODEL_KEY)):
+                    model=st.session_state.get(MODEL_KEY),
+                    style=st.session_state.get(STYLE_KEY)):
                 pieces.append(piece)
                 # The block cursor is the only sign that more is coming.
                 slot.markdown("".join(pieces) + " ▌")
